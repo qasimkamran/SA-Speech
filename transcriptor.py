@@ -1,6 +1,7 @@
 import whisper
 import re
 import os
+import wave
 
 
 model = whisper.load_model("base")
@@ -61,5 +62,55 @@ def transcribe(filename):
     print(result.text)
 
 
+def clip_audio(wav_obj, startpos, clip_duration, clip_name):
+    assert isinstance(wav_obj, wave.Wave_read), f'Not a wave read object'
+
+    # Load audio params
+    framerate = wav_obj.getframerate()
+    n_frames = wav_obj.getnframes()
+    n_channels = wav_obj.getnchannels()
+    sample_width = wav_obj.getsampwidth()
+
+    duration = n_frames / float(framerate)
+
+    assert 0 <= startpos <= duration, f'Start position out of bounds'
+    wav_obj.setpos(startpos)
+
+    start_frames = startpos * framerate
+    clip_frames = clip_duration * framerate
+    endpos = start_frames + clip_frames
+    if endpos > n_frames:
+        clip_frames = (n_frames - start_frames)
+        print('Not enough audio left, creating {0} second clip instead'.format(clip_frames/framerate))
+
+    clip_frames_data = wav_obj.readframes(clip_frames)
+
+    with wave.open(clip_name, "wb") as clip_file:
+        clip_file.setnchannels(n_channels)
+        clip_file.setsampwidth(sample_width)
+        clip_file.setframerate(framerate)
+        clip_file.writeframes(clip_frames_data)
+
+
+def full_transcribe(filename):
+    with wave.open(filename, "rb") as wav_obj:
+
+        # Load audio params
+        framerate = wav_obj.getframerate()
+        n_frames = wav_obj.getnframes()
+        n_channels = wav_obj.getnchannels()
+        sample_width = wav_obj.getsampwidth()
+
+        # Compute number of 30 second n splits
+        duration = n_frames / float(framerate)
+        n_splits = duration / 30
+        if n_splits is not int:
+            n_splits = int(n_splits) + 1
+
+        clip_audio(wav_obj, 0, 30, 'test_clip.wav')
+
+        print('Number of n splits:', n_splits)
+
+
 if __name__ == '__main__':
-    transcribe('audio.wav')
+    full_transcribe('audio.wav')
