@@ -3,7 +3,6 @@ import re
 import os
 import wave
 
-
 model = whisper.load_model("base")
 
 
@@ -37,14 +36,20 @@ def calculate_wer(reference, hypothesis):
             cost = 0
             if ref_words[i - 1] != hyp_words[j - 1]:
                 cost = 1
-            levenshtein_matrix[i][j] = min(levenshtein_matrix[i - 1][j] + 1, levenshtein_matrix[i][j - 1] + 1, levenshtein_matrix[i - 1][j - 1] + cost)
+            levenshtein_matrix[i][j] = min(levenshtein_matrix[i - 1][j] + 1, levenshtein_matrix[i][j - 1] + 1,
+                                           levenshtein_matrix[i - 1][j - 1] + cost)
 
     return levenshtein_matrix[len(ref_words) - 1][len(hyp_words) - 1]
 
 
-def transcribe(filename):
+def transcribe(audio_filename, transcription_filename):
     # load audio and pad/trim it to fit 30 seconds
-    audio = whisper.load_audio(filename)
+    try:
+        audio = whisper.load_audio(audio_filename)
+    except RuntimeError as e:
+        print('Error in loading ', audio_filename)
+        return
+
     audio = whisper.pad_or_trim(audio)
 
     # make log-Mel spectrogram and move to the same device as the model
@@ -60,6 +65,9 @@ def transcribe(filename):
 
     # print the recognized text
     print(result.text)
+
+    with open(transcription_filename, 'a') as transcription:
+        transcription.write(result.text)
 
 
 def clip_audio(wav_obj, startpos, clip_duration, clip_name):
@@ -80,7 +88,7 @@ def clip_audio(wav_obj, startpos, clip_duration, clip_name):
     endpos = start_frames + clip_frames
     if endpos > n_frames:
         clip_frames = (n_frames - start_frames)
-        print('Not enough audio left, creating {0}s clip instead'.format(clip_frames/framerate))
+        print('Not enough audio left, creating {0}s clip instead'.format(clip_frames / framerate))
 
     # Read clip frames from player head position
     wav_obj.setpos(start_frames)
@@ -102,8 +110,8 @@ def clean_clips(clip_names):
         print('Removed {0}'.format(clip))
 
 
-def full_transcribe(filename):
-    with wave.open(filename, "rb") as wav_obj:
+def full_transcribe(audio_filename, transcription_filename):
+    with wave.open(audio_filename, "rb") as wav_obj:
 
         # Load audio params
         framerate = wav_obj.getframerate()
@@ -119,7 +127,7 @@ def full_transcribe(filename):
         startpos = 0
         remainder = duration
         for i in range(n_splits):
-            clip_name = '{0}_clip_{1}.wav'.format(os.path.splitext(filename)[0], i)
+            clip_name = '{0}_clip_{1}.wav'.format(os.path.splitext(audio_filename)[0], i)
             clip_audio(wav_obj, startpos, 30, clip_name)
             clip_names.append(clip_name)
             remainder = duration - startpos
@@ -128,10 +136,16 @@ def full_transcribe(filename):
             startpos += 30
 
         for clip in clip_names:
-            transcribe(clip)
+            transcribe(clip, transcription_filename)
 
         clean_clips(clip_names)
 
 
 if __name__ == '__main__':
-    full_transcribe('audio/tekken.wav')
+    '''
+    # Clip large input audio
+    with wave.open('audio/commentary.wav', "rb") as wav_obj:
+        clip_audio(wav_obj, 0, 600, 'audio/commentary_short.wav')
+    '''
+
+    full_transcribe('audio/commentary_short.wav', 'transcription/commentary_short.txt')
