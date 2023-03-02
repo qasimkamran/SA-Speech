@@ -52,7 +52,7 @@ def transcribe(filename):
 
     # detect the spoken language
     _, probs = model.detect_language(mel)
-    print(f"Detected language: {max(probs, key=probs.get)}")
+    # print(f"Detected language: {max(probs, key=probs.get)}")
 
     # decode the audio
     options = whisper.DecodingOptions(fp16=False)
@@ -74,22 +74,32 @@ def clip_audio(wav_obj, startpos, clip_duration, clip_name):
     duration = n_frames / float(framerate)
 
     assert 0 <= startpos <= duration, f'Start position out of bounds'
-    wav_obj.setpos(startpos)
 
     start_frames = startpos * framerate
     clip_frames = clip_duration * framerate
     endpos = start_frames + clip_frames
     if endpos > n_frames:
         clip_frames = (n_frames - start_frames)
-        print('Not enough audio left, creating {0} second clip instead'.format(clip_frames/framerate))
+        print('Not enough audio left, creating {0}s clip instead'.format(clip_frames/framerate))
 
+    # Read clip frames from player head position
+    wav_obj.setpos(start_frames)
     clip_frames_data = wav_obj.readframes(clip_frames)
 
+    # Write clipped audio to a new file
     with wave.open(clip_name, "wb") as clip_file:
         clip_file.setnchannels(n_channels)
         clip_file.setsampwidth(sample_width)
         clip_file.setframerate(framerate)
         clip_file.writeframes(clip_frames_data)
+        print('Written to {0}'.format(clip_name))
+
+
+def clean_clips(clip_names):
+    assert clip_names, f'Empty clip names list'
+    for clip in clip_names:
+        os.remove(clip)
+        print('Removed {0}'.format(clip))
 
 
 def full_transcribe(filename):
@@ -98,8 +108,6 @@ def full_transcribe(filename):
         # Load audio params
         framerate = wav_obj.getframerate()
         n_frames = wav_obj.getnframes()
-        n_channels = wav_obj.getnchannels()
-        sample_width = wav_obj.getsampwidth()
 
         # Compute number of 30 second n splits
         duration = n_frames / float(framerate)
@@ -107,10 +115,23 @@ def full_transcribe(filename):
         if n_splits is not int:
             n_splits = int(n_splits) + 1
 
-        clip_audio(wav_obj, 0, 30, 'test_clip.wav')
+        clip_names = []
+        startpos = 0
+        remainder = duration
+        for i in range(n_splits):
+            clip_name = '{0}_clip_{1}.wav'.format(os.path.splitext(filename)[0], i)
+            clip_audio(wav_obj, startpos, 30, clip_name)
+            clip_names.append(clip_name)
+            remainder = duration - startpos
+            if remainder < 30:
+                break
+            startpos += 30
 
-        print('Number of n splits:', n_splits)
+        for clip in clip_names:
+            transcribe(clip)
+
+        clean_clips(clip_names)
 
 
 if __name__ == '__main__':
-    full_transcribe('audio.wav')
+    full_transcribe('audio/tekken.wav')
