@@ -57,7 +57,6 @@ def transcribe(audio_filename, transcription_filename):
 
     # detect the spoken language
     _, probs = model.detect_language(mel)
-    # print(f"Detected language: {max(probs, key=probs.get)}")
 
     # decode the audio
     options = whisper.DecodingOptions(fp16=False)
@@ -68,6 +67,7 @@ def transcribe(audio_filename, transcription_filename):
 
     with open(transcription_filename, 'a') as transcription:
         transcription.write(result.text)
+        transcription.write(' ')
 
 
 def clip_audio(wav_obj, startpos, clip_duration, clip_name):
@@ -103,6 +103,40 @@ def clip_audio(wav_obj, startpos, clip_duration, clip_name):
         print('Written to {0}'.format(clip_name))
 
 
+def clip_audio_inverse(wav_obj, startpos, clip_duration, clip_name):
+    assert isinstance(wav_obj, wave.Wave_read), f'Not a wave read object'
+
+    # Load audio params
+    framerate = wav_obj.getframerate()
+    n_frames = wav_obj.getnframes()
+    n_channels = wav_obj.getnchannels()
+    sample_width = wav_obj.getsampwidth()
+
+    duration = n_frames / float(framerate)
+
+    if startpos < 0 or startpos > duration:
+        print('Start position out of bounds')
+        return
+
+    start_frames = startpos * framerate
+    clip_frames = clip_duration * framerate
+    remaining_frames = n_frames - clip_frames
+    if startpos == 0:
+        remaining_frames = n_frames
+
+    # Read clip frames from player head position
+    wav_obj.setpos(start_frames)
+    clip_frames_data = wav_obj.readframes(remaining_frames)
+
+    # Write clipped audio to a new file
+    with wave.open(clip_name, "wb") as clip_file:
+        clip_file.setnchannels(n_channels)
+        clip_file.setsampwidth(sample_width)
+        clip_file.setframerate(framerate)
+        clip_file.writeframes(clip_frames_data)
+        print('Written to {0}'.format(clip_name))
+
+
 def clean_clips(clip_names):
     assert clip_names, f'Empty clip names list'
     for clip in clip_names:
@@ -110,7 +144,13 @@ def clean_clips(clip_names):
         print('Removed {0}'.format(clip))
 
 
+def clean_transcription(transcription_filename):
+        os.remove(transcription_filename)
+        print('Removed {0}'.format(transcription_filename))
+
+
 def full_transcribe(audio_filename, transcription_filename):
+    clean_transcription(transcription_filename)
     with wave.open(audio_filename, "rb") as wav_obj:
 
         # Load audio params
@@ -139,13 +179,14 @@ def full_transcribe(audio_filename, transcription_filename):
             transcribe(clip, transcription_filename)
 
         clean_clips(clip_names)
+        clean_transcription(transcription_filename)
 
 
 if __name__ == '__main__':
     '''
     # Clip large input audio
-    with wave.open('audio/commentary.wav', "rb") as wav_obj:
-        clip_audio(wav_obj, 0, 600, 'audio/commentary_short.wav')
+    with wave.open('audio/commentary_short.wav', "rb") as wav_obj:
+        clip_start_recursively(wav_obj, 0, 30)
     '''
 
     full_transcribe('audio/commentary_short.wav', 'transcription/commentary_short.txt')
