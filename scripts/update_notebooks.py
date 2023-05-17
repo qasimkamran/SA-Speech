@@ -4,17 +4,18 @@ import gdown
 README_FILE = 'README.md'
 
 
-# Checks the README.md for the notebook flag and gets a list of all retrievable links
 def get_notebook_drive_links():
     notebook_links = []
-    flag = 'notebooks'
+    flag = '### Notebooks'
     flag_found = False
 
     with open(README_FILE, 'r') as file:
         for line in file:
             line = line.strip()
 
-            if flag_found and line.startswith('http'):
+            print(line)
+
+            if flag_found and line.startswith('- https://colab.research.google.com/drive/'):
                 notebook_links.append(line)
 
             if line == flag:
@@ -25,6 +26,7 @@ def get_notebook_drive_links():
     return notebook_links
 
 
-if __name_- == '__main__':
+if __name__ == '__main__':
+    notebook_links = get_notebook_drive_links()
     for link in notebook_links:
        gdown.download(link)
