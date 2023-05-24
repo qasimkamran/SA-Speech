@@ -2,28 +2,29 @@ import os
 import librosa
 
 
-def get_feature(file_path: str, mfcc_len: int = 39, mean_signal_length: int = 100000):
-  """
-  file_path: Speech signal folder
-  mfcc_len: MFCC coefficient length
-  mean_signal_length: MFCC feature average length
-  """
-  signal, fs = librosa.load(file_path)
+def get_mfcc_features(file_path: str, mfcc_len: int = 13, duration: int = 2.5):
+  signal, fs = librosa.load(file_path, res_type='kaiser_fast', duration=duration, sr=22050*2, offset=0.5)
   s_len = len(signal)
-
-  if s_len < mean_signal_length:
-    pad_len = mean_signal_length - s_len
-    pad_rem = pad_len % 2
-    pad_len //= 2
-    signal = np.pad(signal, (pad_len, pad_len + pad_rem), 'constant', constant_values = 0)
-  else:
-    pad_len = s_len - mean_signal_length
-    pad_len //= 2
-    signal = signal[pad_len:pad_len + mean_signal_length]
-  mfcc = librosa.feature.mfcc(y=signal, sr=fs, n_mfcc=39)
+  if s_len < duration * fs:
+    padding = int(duration * fs) - s_len
+    signal = librosa.util.pad_center(signal, padding)
+  mfcc = librosa.feature.mfcc(y=signal, sr=fs, n_mfcc=mfcc_len)
   mfcc = mfcc.T
-  feature = mfcc
-  return feature
+  features = mfcc
+  return features
+
+
+def get_n_wav_files(directory, n):
+  wav_files = []
+  count = 0
+  for root, dirs, files in os.walk(directory):
+    for file in files:
+      if file.endswith(".wav"):
+        wav_files.append(os.path.join(root, file))
+        count += 1
+        if count == n:
+          return wav_files
+  return wav_files
 
 
 if __name__ == '__main__':
