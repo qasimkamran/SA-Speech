@@ -3,7 +3,16 @@ import resampy
 import librosa
 import numpy as np
 import pandas as pd
+import argparse
 
+parser = argparse.ArgumentParser(description='Argument Parser')
+
+parser.add_argument('--data_dir', dest='data_dir', action='store', required=True, type=str)
+parser.add_argument('--mfcc_len', dest='mfcc_len', action='store', type=int)
+parser.add_argument('--duration', dest='duration', action='store', type=float)
+parser.add_argument('--mode', dest='mode', action='store', required=True, type=str)
+
+args = parser.parse_args()
 
 def get_mfcc(directory: str, mfcc_len: int = 13, duration: int = 2.5):
   signal, fs = librosa.load(directory, res_type='kaiser_fast', duration=duration, sr=22050*2, offset=0.5)
