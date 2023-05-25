@@ -16,12 +16,12 @@ def get_mfcc(directory: str, mfcc_len: int = 13, duration: int = 2.5):
   return mfcc
 
 
-def get_mean_mfcc_per_frame(directory):
+def get_mean_mfcc_per_frame(directory: str):
   mfcc = get_feature(directory)
   mean_mfcc = np.mean(mfcc, axis=1)
 
 
-def get_n_wav_files(directory, n):
+def get_n_wav_files(directory: str, n: int):
   wav_files = []
   count = 0
   for root, dirs, files in os.walk(directory):
