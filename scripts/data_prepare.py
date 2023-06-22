@@ -90,10 +90,12 @@ def create_clips(audio_file, audio_params, audio_duration, clip_duration):
         remainder = audio_duration - startpos
         clip_name = '{0}_{1}.wav'.format(audio_name, i)
 
-        if remainder < clip_duration and remainder != 0:
+        if remainder == 0:
+            break
+
+        if remainder < clip_duration:
             process_last_clip(audio_file, audio_params, startpos, clip_duration, clip_name)
-            if os.path.exists(clip_name):
-                clip_names.append(clip_name)
+            clip_names.append(clip_name)
             break
 
         transcriptor.clip_audio(audio_file, startpos, clip_duration, clip_name)
@@ -106,7 +108,7 @@ def process_last_clip(audio_file, audio_params, startpos, clip_duration, clip_na
     transcriptor.clip_audio(audio_file, startpos, clip_duration, clip_name)
     with wave.open(clip_name, "rb") as audio_clip:
         audio_bytes = pad_audio(audio_clip, clip_duration , audio_params[2])
-    os.remove(clip_name)
+    os.unlink(clip_name)
     audio_array = np.frombuffer(audio_bytes, dtype=np.float64)  # Assuming 24-bit PCM audio
     sf.write(clip_name, audio_array, audio_params[2], subtype='PCM_24') # TODO use original audio bitrate without specifying
 
@@ -153,11 +155,9 @@ def main():
             label_file.write(labels.encode('utf-8'))
             print(f'Written to {index}.txt')
         homogenize_clips(f'{index}.wav', f'{index}.txt', 3) # Make all clips 3 seconds in length
-        os.remove(f'{index}.wav')
-        os.remove(f'{index}.txt')
+        os.unlink(f'{index}.wav')
+        os.unlink(f'{index}.txt')
 
 
 if __name__ == "__main__":
     main()
-    # last_clip = wave.open('data/1_1.wav', "rb")
-    # print(last_clip.getnframes() / last_clip.getframerate())
