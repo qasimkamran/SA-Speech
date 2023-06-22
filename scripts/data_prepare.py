@@ -2,6 +2,7 @@ import os
 import argparse
 import wave
 import csv
+import tempfile
 import transcriptor
 import pandas as pd
 import numpy as np
@@ -41,28 +42,33 @@ def validate_csv(csv_header):
 
 
 def pad_audio(audio, target_duration, sr):
-    print(f'Sample width: {audio.getsampwidth()}')
-    audio_frames = audio.readframes(audio.getnframes())
-    audio_array = np.frombuffer(audio_frames, dtype=np.float64)  # Assuming 16-bit PCM audio
-    audio_duration = audio.getnframes() / sr
+    # TODO change wave object parameter here to generic audio file representation and modify function to match
+    tmpfile = tempfile.NamedTemporaryFile(delete=False)
+    tmpfile.close()
 
-    print(f'Sample rate: {sr}')
-    print(f'Audio duration: {audio_duration}')
-    print(f'Target duration: {target_duration}')
+    with wave.open(tmpfile.name, 'wb') as wavfile:
+        wavfile.setparams(audio.getparams())
+        wavfile.writeframes(audio.readframes(audio.getnframes()))
+
+    audio_array, sr = sf.read(tmpfile.name)
+    audio_duration = len(audio_array) / sr
 
     if audio_duration < target_duration:
         total_samples_required = int(target_duration * sr)
-        audio_full_repeats = np.tile(audio_array, int(total_samples_required / audio_array.size))
-        remaining_samples = total_samples_required - audio_full_repeats.size
+        audio_full_repeats = np.tile(audio_array, int(total_samples_required / len(audio_array)))
+        remaining_samples = total_samples_required - len(audio_full_repeats)
         audio_partial_repeat = audio_array[:remaining_samples]
         padded_audio_array = np.concatenate([audio_full_repeats, audio_partial_repeat])
-        print(f'Size: {padded_audio_array.size}')
+
+        os.unlink(tmpfile.name)
         return padded_audio_array.tobytes()
     else:
-        return audio_frames
+        os.unlink(tmpfile.name)
+        return audio.readframes(audio.getnframes())
 
 
 def open_audio_file(audio_dir):
+    # TODO make function return generic audio file representation
     audio_file = wave.open(audio_dir, "rb")
     audio_name, _ = os.path.splitext(audio_dir)
     audio_params = (audio_file.getnchannels(),
@@ -70,22 +76,24 @@ def open_audio_file(audio_dir):
                     audio_file.getframerate(),
                     audio_name)
     n_frames = audio_file.getnframes()
-    duration = n_frames / float(audio_params[2])
-    return audio_file, audio_params, duration
+    audio_duration = n_frames / float(audio_params[2])
+    return audio_file, audio_params, audio_duration
 
 
-def create_clips(audio_file, audio_params, duration, clip_duration):
+def create_clips(audio_file, audio_params, audio_duration, clip_duration):
     clip_names = []
-    n_splits = int(duration / clip_duration) + 1
+    n_splits = int(audio_duration / clip_duration) + 1
     audio_name = audio_params[-1]
 
     for i in range(n_splits):
         startpos = i * clip_duration
-        remainder = duration - startpos
+        remainder = audio_duration - startpos
         clip_name = '{0}_{1}.wav'.format(audio_name, i)
 
         if remainder < clip_duration and remainder != 0:
             process_last_clip(audio_file, audio_params, startpos, clip_duration, clip_name)
+            if os.path.exists(clip_name):
+                clip_names.append(clip_name)
             break
 
         transcriptor.clip_audio(audio_file, startpos, clip_duration, clip_name)
@@ -97,14 +105,25 @@ def create_clips(audio_file, audio_params, duration, clip_duration):
 def process_last_clip(audio_file, audio_params, startpos, clip_duration, clip_name):
     transcriptor.clip_audio(audio_file, startpos, clip_duration, clip_name)
     with wave.open(clip_name, "rb") as audio_clip:
-        audio_clip = pad_audio(audio_clip, clip_duration , audio_params[2])
+        audio_bytes = pad_audio(audio_clip, clip_duration , audio_params[2])
     os.remove(clip_name)
-    sf.write(clip_name, audio_clip, audio_params[2], subtype='PCM_24')
+    audio_array = np.frombuffer(audio_bytes, dtype=np.float64)  # Assuming 24-bit PCM audio
+    sf.write(clip_name, audio_array, audio_params[2], subtype='PCM_24') # TODO use original audio bitrate without specifying
 
 
-def homogenize_clips(audio_dir, label_dir, clip_duration):
-    audio_file, audio_params, duration = open_audio_file(audio_dir)
+def copy_text_file(source_filenamepath, target_filenamepath):
+    with open(source_filenamepath, 'r') as source_file:
+        with open(target_filenamepath, 'w') as target_file:
+            content = source_file.read()
+            target_file.write(content)
+
+
+def homogenize_clips(audio_filenamepath, label_filenamepath, clip_duration):
+    audio_file, audio_params, duration = open_audio_file(audio_filenamepath)
     clip_names = create_clips(audio_file, audio_params, duration, clip_duration)
+    label_name = audio_params[-1]
+    for i in range(len(clip_names)):
+        copy_text_file(label_filenamepath, f'{label_name}_{i}.txt')
     audio_file.close()
     return clip_names
 
@@ -133,8 +152,9 @@ def main():
         with open(f'{index}.txt', "wb") as label_file:
             label_file.write(labels.encode('utf-8'))
             print(f'Written to {index}.txt')
-        homogenize_clips(f'{index}.wav', f'{index}.txt', 3)
+        homogenize_clips(f'{index}.wav', f'{index}.txt', 3) # Make all clips 3 seconds in length
         os.remove(f'{index}.wav')
+        os.remove(f'{index}.txt')
 
 
 if __name__ == "__main__":
