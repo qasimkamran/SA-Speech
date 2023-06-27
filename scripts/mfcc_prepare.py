@@ -15,7 +15,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def get_mfcc(directory: str, mfcc_len: int = 13, duration: int = 2.5):
+def get_mfcc(directory: str, mfcc_len: int = 13, duration: int = 3):
     signal, fs = librosa.load(directory, res_type='kaiser_fast', duration=duration, sr=22050*2, offset=0.5)
     s_len = len(signal)
     if s_len < duration * fs:
