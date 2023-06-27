@@ -9,35 +9,44 @@ import numpy as np
 import soundfile as sf
 
 
-REQUIRED_COLUMNS = ['StartTime(s)', 'EndTime(s)', 'EXCITED', 'CHEERING', 'DISAPPOINTED', 'BOOING', 'ANGRY', 'APPLAUSE', 'SINGING', 'PA']
+REQUIRED_COLUMNS = ['StartTime(s)', 'EndTime(s)', 'Excited', 'Cheering', 'Disappointed', 'Booing', 'Angry', 'Applause', 'Singing', 'PA']
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Argument Parser')
-    parser.add_argument('--data_dir', dest='datadir', action='store', required=True, type=str)
-    parser.add_argument('--output_dir', dest='outputdir', action='store', required=True, type=str)
+    parser.add_argument('--data_dir', dest='data_dir', action='store', required=True, type=str)
+    parser.add_argument('--output_dir', dest='output_dir', action='store', required=True, type=str)
     return parser.parse_args()
 
 
-def validate_files(file_list):
-    if len(file_list) != 2:
-        print(f'Data directory must only contain two files. Current count: {len(file_list)}')
-        raise ValueError('Invalid file count in directory.')
+def get_filename_pairs(data_dir):
+    filenames = os.listdir(data_dir)
+    filename_pairs = {}
 
-    wav_files = [file for file in file_list if file.endswith('.wav')]
-    csv_files = [file for file in file_list if file.endswith('.csv')]
+    csv_filenames = [f for f in filenames if f.endswith('.csv')]
+    wav_filenames = [f for f in filenames if f.endswith('.wav')]
 
-    if len(wav_files) != 1 or len(csv_files) != 1:
-        print('There must only be one CSV and one WAV file in the data directory.')
-        raise ValueError('Invalid file types in directory.')
-    return wav_files[0], csv_files[0]
+    # Assume that for every csv file there is a corresponding wav file with the same name
+    for csv_filename in csv_filenames:
+        csv_filenamepath = os.path.join(data_dir, csv_filename)
+        with open(csv_filenamepath, 'r') as file:
+            csv_reader = csv.reader(file)
+            csv_header = next(csv_reader)
+        validate_csv(csv_header)
+        
+        base_name = os.path.splitext(csv_filename)[0]
+        corresponding_wav = base_name + '.wav'
+
+        if corresponding_wav in wav_filenames:
+            filename_pairs[csv_filename] = corresponding_wav
+
+    return filename_pairs
 
 
 def validate_csv(csv_header):
-    if all(column in csv_header for column in REQUIRED_COLUMNS):
-        print("CSV file contains the required columns.")
-    else:
-        print("CSV file does not contain all the required columns.")
+    case_agnostic_required_columns = [column.lower() for column in REQUIRED_COLUMNS]
+    case_agnostic_csv_header = [column.lower() for column in csv_header]
+    if not all(column in case_agnostic_csv_header for column in case_agnostic_required_columns):
         raise ValueError('CSV file missing required columns.')
 
 
@@ -132,31 +141,35 @@ def homogenize_clips(audio_filenamepath, label_filenamepath, clip_duration):
 
 def main():
     args = parse_arguments()
-    file_list = os.listdir(args.datadir)
-    wav_file, csv_file = validate_files(file_list)
-    wav_path = os.path.join(args.datadir, wav_file)
-    csv_path = os.path.join(args.datadir, csv_file)
+    filename_pairs = get_filename_pairs(args.data_dir)
+    base_dir = os.getcwd()
 
-    with open(csv_path, 'r') as file:
-        csv_reader = csv.reader(file)
-        csv_header = next(csv_reader)
-    validate_csv(csv_header)
+    count = 0
+    for csv_filename, wav_filename in filename_pairs.items():
+        wav_filenamepath = os.path.join(args.data_dir, wav_filename)
+        csv_filenamepath = os.path.join(args.data_dir, csv_filename)
 
-    df = pd.read_csv(csv_path)
-    original_audio = wave.open(wav_path, "rb")
-
-    os.chdir(args.outputdir)
-    for index, row in df.iterrows():
-        start_time_s = int(row['StartTime(s)'])
-        end_time_s = int(row['EndTime(s)'])
-        transcriptor.clip_audio(original_audio, start_time_s, (end_time_s - start_time_s), f'{index}.wav')
-        labels = ' '.join(str(float(row[column])) for column in REQUIRED_COLUMNS[2:])
-        with open(f'{index}.txt', "wb") as label_file:
-            label_file.write(labels.encode('utf-8'))
-            print(f'Written to {index}.txt')
-        homogenize_clips(f'{index}.wav', f'{index}.txt', 3) # Make all clips 3 seconds in length
-        os.unlink(f'{index}.wav')
-        os.unlink(f'{index}.txt')
+        df = pd.read_csv(csv_filenamepath)
+        df.columns = df.columns.str.lower()
+        original_audio = wave.open(wav_filenamepath, "rb")
+        
+        os.chdir(args.output_dir)
+        for index, row in df.iterrows():
+            start_time_s = int(row['starttime(s)'])
+            end_time_s = int(row['endtime(s)'])
+            output_wav_filenamepath = f'{count}_{index}.wav'
+            output_txt_filenamepath = f'{count}_{index}.txt'
+            transcriptor.clip_audio(original_audio, start_time_s, (end_time_s - start_time_s), output_wav_filenamepath)
+            case_agnostic_required_columns = [column.lower() for column in REQUIRED_COLUMNS]
+            labels = ' '.join(str(float(row[column])) for column in case_agnostic_required_columns[2:])
+            with open(output_txt_filenamepath, "wb") as label_file:
+                label_file.write(labels.encode('utf-8'))
+                print(f'Written to {output_txt_filenamepath}')
+            homogenize_clips(output_wav_filenamepath, output_txt_filenamepath, 3) # Make all clips 3 seconds in length
+            os.unlink(output_wav_filenamepath)
+            os.unlink(output_txt_filenamepath)
+        os.chdir(base_dir)
+        count += 1
 
 
 if __name__ == "__main__":
