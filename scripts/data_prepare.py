@@ -2,20 +2,24 @@ import os
 import argparse
 import wave
 import csv
+import shutil
 import tempfile
 import transcriptor
 import pandas as pd
 import numpy as np
 import soundfile as sf
+import matplotlib.pyplot as plt
 
 
 REQUIRED_COLUMNS = ['StartTime(s)', 'EndTime(s)', 'Excited', 'Cheering', 'Disappointed', 'Booing', 'Angry', 'Applause', 'Singing', 'PA']
+THRESHOLD = 0.5
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Argument Parser')
-    parser.add_argument('--data_dir', dest='data_dir', action='store', required=True, type=str)
+    parser.add_argument('--input_dir', dest='input_dir', action='store', required=True, type=str)
     parser.add_argument('--output_dir', dest='output_dir', action='store', required=True, type=str)
+    parser.add_argument('--already_transformed', action='store_true', required=False, default=False)
     return parser.parse_args()
 
 
@@ -139,15 +143,58 @@ def homogenize_clips(audio_filenamepath, label_filenamepath, clip_duration):
     return clip_names
 
 
-def main():
-    args = parse_arguments()
-    filename_pairs = get_filename_pairs(args.data_dir)
-    base_dir = os.getcwd()
+def relocate_wav_and_txt(base_dir, txt_dir, wav_dir):
+    filenames = os.listdir(base_dir)
+    for filename in filenames:
+        filenamepath = os.path.join(base_dir, filename)
 
+        if filename.endswith('.txt'):
+            shutil.move(filenamepath, os.path.join(txt_dir, filename))
+            print(f"Moved {filename} to {txt_dir}")
+
+        if filename.endswith('.wav'):
+            shutil.move(filenamepath, os.path.join(wav_dir, filename))
+            print(f"Moved {filename} to {wav_dir}")
+
+
+def plot_frequency_distribution(label_dir, stats_dir):
+    label_filenames = [filename for filename in os.listdir(label_dir) if filename.endswith('.txt')]
+
+    categories = REQUIRED_COLUMNS[2:]
+    frequencies = [0] * len(categories)
+
+    for filename in label_filenames:
+        filenamepath = os.path.join(label_dir, filename)
+
+        with open(filenamepath, 'r') as file:
+            line = file.readline().strip()
+            values = [float(val) for val in line.split()]
+            present_categories = [0] *  len(values)
+            present_categories = [1 if value > THRESHOLD else 0 for value in values]
+
+        # Update the frequency count for each emotion
+        frequencies = [frequencies[i] + present_categories[i] for i in range(len(frequencies))]
+
+    # Create a bar plot
+    plt.figure(figsize=(10, 6))
+    plt.bar(categories, frequencies)
+    plt.title('Thresholded Frequency Distribution')
+    plt.xlabel('Category')
+    plt.ylabel('Frequency')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    output_file = os.path.join(stats_dir, 'frequency_dstribution.png')
+    plt.savefig(output_file)
+    print(f"Figure saved to {output_file}")
+    plt.close()
+
+
+def process_data(filename_pairs, args, base_dir):
     count = 0
     for csv_filename, wav_filename in filename_pairs.items():
-        wav_filenamepath = os.path.join(args.data_dir, wav_filename)
-        csv_filenamepath = os.path.join(args.data_dir, csv_filename)
+        wav_filenamepath = os.path.join(args.input_dir, wav_filename)
+        csv_filenamepath = os.path.join(args.input_dir, csv_filename)
 
         df = pd.read_csv(csv_filenamepath)
         df.columns = df.columns.str.lower()
@@ -170,6 +217,32 @@ def main():
             os.unlink(output_txt_filenamepath)
         os.chdir(base_dir)
         count += 1
+
+
+def main():
+    args = parse_arguments()
+    filename_pairs = get_filename_pairs(args.input_dir)
+    base_dir = os.getcwd()
+
+    raw_dir = os.path.join(args.output_dir, 'raw')
+    label_dir = os.path.join(args.output_dir, 'labels')
+    stats_dir = os.path.join(args.output_dir, 'stats')
+
+    if not os.path.exists(raw_dir):
+        os.mkdir(raw_dir)
+
+    if not os.path.exists(label_dir):
+        os.mkdir(label_dir)
+
+    if not os.path.exists(stats_dir):
+        os.mkdir(stats_dir)
+
+    if not args.already_transformed:
+        process_data(filename_pairs, args, base_dir)
+        # TODO extra step takes much more time and is unoptimal, refactor to just write at different directories initially
+        relocate_wav_and_txt(args.output_dir, label_dir, raw_dir)
+        
+    plot_frequency_distribution(label_dir, stats_dir)
 
 
 if __name__ == "__main__":
