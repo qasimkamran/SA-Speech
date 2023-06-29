@@ -27,8 +27,8 @@ def get_filename_pairs(data_dir):
     filenames = os.listdir(data_dir)
     filename_pairs = {}
 
-    csv_filenames = [f for f in filenames if f.endswith('.csv')]
-    wav_filenames = [f for f in filenames if f.endswith('.wav')]
+    csv_filenames = [filename for filename in filenames if filename.endswith('.csv')]
+    wav_filenames = [filename for filename in filenames if filename.endswith('.wav')]
 
     # Assume that for every csv file there is a corresponding wav file with the same name
     for csv_filename in csv_filenames:
@@ -241,7 +241,7 @@ def main():
         process_data(filename_pairs, args, base_dir)
         # TODO extra step takes much more time and is unoptimal, refactor to just write at different directories initially
         relocate_wav_and_txt(args.output_dir, label_dir, raw_dir)
-        
+
     plot_frequency_distribution(label_dir, stats_dir)
 
 

@@ -21,7 +21,7 @@ def parse_arguments():
 def process_data(input_dir, output_dir):
     filenames = [filename for filename in os.listdir(input_dir) if filename.endswith('.wav')]
 
-    progress_bar = tqdm(filenames, desc='Converting wav to mel specs', unit='filename')
+    progress_bar = tqdm(filenames, desc='Writing Mel Spectrograms', unit='filename')
 
     for filename in progress_bar:
         filenamepath = os.path.join(input_dir, filename)
