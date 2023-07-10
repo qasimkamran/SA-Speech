@@ -88,7 +88,10 @@ def clip_audio(wav_obj, startpos, clip_duration, clip_name):
     endpos = start_frames + clip_frames
     if endpos > n_frames:
         clip_frames = (n_frames - start_frames)
-        print('Not enough audio left, creating {0}s clip instead'.format(clip_frames / framerate))
+        clip_duration = clip_frames / framerate
+        if clip_duration == 0:
+            return
+        print('Not enough audio left, creating {0}s clip instead'.format(clip_duration))
 
     # Read clip frames from player head position
     wav_obj.setpos(start_frames)
